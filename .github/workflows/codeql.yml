@@ -1,73 +1,53 @@
-# For most projects, this workflow file will not need changing; you simply need
-# to commit it to your repository.
+# Mobb/CodeQL Fixer on pull requests
+# This workflow defines the needed steps to run CodeQL on every pull request and pass the results to Mobb Fixer.
+# This example utilizes CodeQL with JavaScript. For other languages, change the CodeQL language settings below.
 #
-# You may wish to alter this file to override the set of languages analyzed,
-# or to provide custom queries or build logic.
-#
-# ******** NOTE ********
-# We have attempted to detect the languages in your repository. Please check
-# the `language` matrix defined below to confirm you have the correct set of
-# supported CodeQL languages.
-#
-name: "CodeQL"
+# Secrets in use:
+# MOBB_API_TOKEN - your mobb user credentials (autumatially set if you forked this repo via the Mobb app)
+# GITHUB_TOKEN - automatically set by GitHub
+
+name: "Mobb/CodeQL"
 
 on:
   pull_request:
-  push:
-    branches: ["master"]
+    branches: ["*"]
 
 jobs:
-  analyze:
-    name: Analyze
-    runs-on: ubuntu-latest
+  scan-and-fix:
+    name: Scan with CodeQL and fix with Mobb
+    runs-on: 'ubuntu-latest'
+    timeout-minutes: 360
     permissions:
-      actions: read
-      contents: read
-      security-events: write
+      pull-requests: write
+      statuses: write
 
     strategy:
       fail-fast: false
       matrix:
         language: ["javascript-typescript"]
-        # CodeQL supports [ 'cpp', 'csharp', 'go', 'java', 'javascript', 'python', 'ruby' ]
-        # Learn more about CodeQL language support at https://git.io/codeql-language-support
+        # CodeQL supports [ 'c-cpp', 'csharp', 'go', 'java-kotlin', 'javascript-typescript', 'python', 'ruby', 'swift' ]
+        codeql_output_filename: ["javascript.sarif"]
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
-      # Initializes the CodeQL tools for scanning.
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v2
         with:
           languages: ${{ matrix.language }}
-          # If you wish to specify custom queries, you can do so here or in a config file.
-          # By default, queries listed here will override any specified in a config file.
-          # Prefix the list here with "+" to use these queries and those in the config file.
-          # queries: ./path/to/local/query, your-org/your-repo/queries@main
 
-      # Autobuild attempts to build any compiled languages  (C/C++, C#, or Java).
-      # If this step fails, then you should remove it and run the build manually (see below)
-      - name: Autobuild
-        uses: github/codeql-action/autobuild@v2
-
-      # ℹ️ Command-line programs to run using the OS shell.
-      # 📚 https://git.io/JvXDl
-
-      # ✏️ If the Autobuild fails above, remove it and uncomment the following three lines
-      #    and modify them (or add more) to build your code if your project
-      #    uses a compiled language
-
-      #- run: |
-      #   make bootstrap
-      #   make release
-
-      - name: Perform CodeQL Analysis
+      - name: Perform CodeQL analysis
         uses: github/codeql-action/analyze@v2
         with:
+          category: "/language:${{ matrix.language }}"
           output: results
-      - uses: actions/upload-artifact@v3
+
+      - name: Run Mobb on the findings and get fixes
+        if: always()
+        uses: yhaggai/action/review@main
         with:
-          name: codeql-res
-          path: results
-          if-no-files-found: error # 'warn' or 'ignore' are also available, defaults to `warn`
+          report-file: results/${{ matrix.codeql_output_filename }}
+          api-key: ${{ secrets.MOBB_API_TOKEN_DEV }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          scanner: codeql
